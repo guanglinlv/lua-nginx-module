@@ -4,7 +4,7 @@ use Test::Nginx::Socket::Lua;
 
 repeat_each(2);
 
-plan tests => repeat_each() * 219;
+plan tests => repeat_each() * 217;
 
 $ENV{TEST_NGINX_HTML_DIR} ||= html_dir();
 
@@ -179,21 +179,14 @@ SSL reused session
 GET /t
 --- response_body
 connected: 1
-ssl handshake: userdata
-sent http request: 58 bytes.
-received: HTTP/1.1 302 Moved Temporarily
-close: 1 nil
+failed to do SSL handshake: handshake failed
 
 --- log_level: debug
 --- grep_error_log eval: qr/lua ssl (?:set|save|free) session: [0-9A-F]+:\d+/
---- grep_error_log_out eval
-qr/^lua ssl save session: ([0-9A-F]+):2
-lua ssl free session: ([0-9A-F]+):1
-$/
+--- grep_error_log_out
 --- no_error_log
 lua ssl server name:
 SSL reused session
-[error]
 [alert]
 --- timeout: 5
 
@@ -432,17 +425,17 @@ $::ComodoRootCertificate"
 
 --- request
 GET /t
---- response_body
-connected: 1
-failed to do SSL handshake: certificate host mismatch
+--- response_body_like chomp
+\Aconnected: 1
+failed to do SSL handshake: (?:handshake failed|certificate host mismatch)
 failed to send http request: closed
+\z
 
 --- log_level: debug
 --- grep_error_log eval: qr/lua ssl (?:set|save|free) session: [0-9A-F]+:\d+/
 --- grep_error_log_out
 --- error_log
 lua ssl server name: "blah.openresty.org"
-lua ssl certificate does not match host "blah.openresty.org"
 --- no_error_log
 SSL reused session
 [alert]
@@ -512,10 +505,11 @@ $::ComodoRootCertificate"
 
 --- request
 GET /t
---- response_body
-connected: 1
-failed to do SSL handshake: certificate host mismatch
+--- response_body_like chomp
+\Aconnected: 1
+failed to do SSL handshake: (?:handshake failed|certificate host mismatch)
 failed to send http request: closed
+\z
 
 --- log_level: debug
 --- grep_error_log eval: qr/lua ssl (?:set|save|free) session: [0-9A-F]+:\d+/
@@ -589,7 +583,7 @@ GET /t
 connected: 1
 ssl handshake: userdata
 sent http request: 56 bytes.
-received: HTTP/1.1 302 Moved Temporarily
+received: HTTP/1.1 404 Not Found
 close: 1 nil
 
 --- log_level: debug
@@ -1267,7 +1261,7 @@ lua ssl free session: ([0-9A-F]+):1
 $/
 --- error_log
 lua ssl server name: "openresty.org"
-SSL: TLSv1.2, cipher: "ECDHE-RSA-AES256-SHA 
+SSL: TLSv1.2, cipher: "ECDHE-RSA-AES256-SHA SSLv3
 --- no_error_log
 SSL reused session
 [error]
@@ -1347,7 +1341,7 @@ lua ssl free session: ([0-9A-F]+):1
 $/
 --- error_log
 lua ssl server name: "openresty.org"
-SSL: TLSv1, cipher: "ECDHE-RSA-AES128-SHA 
+SSL: TLSv1, cipher: "ECDHE-RSA-AES128-SHA SSLv3
 --- no_error_log
 SSL reused session
 [error]

@@ -10,7 +10,7 @@ Production ready.
 
 = Version =
 
-This document describes ngx_lua [https://github.com/openresty/lua-nginx-module/tags v0.10.8] released on 8 April 2017.
+This document describes ngx_lua [https://github.com/openresty/lua-nginx-module/tags v0.10.10] released on 8 August 2017.
 
 = Synopsis =
 <geshi lang="nginx">
@@ -315,13 +315,13 @@ As from the <code>v0.5.0rc32</code> release, all <code>*_by_lua_file</code> conf
 Please note that the bytecode format used by LuaJIT 2.0/2.1 is not compatible with that used by the standard Lua 5.1 interpreter. So if using LuaJIT 2.0/2.1 with ngx_lua, LuaJIT compatible bytecode files must be generated as shown:
 
 <geshi lang="bash">
-    /path/to/luajit/bin/luajit -b /path/to/input_file.lua /path/to/output_file.luac
+    /path/to/luajit/bin/luajit -b /path/to/input_file.lua /path/to/output_file.ljbc
 </geshi>
 
 The <code>-bg</code> option can be used to include debug information in the LuaJIT bytecode file:
 
 <geshi lang="bash">
-    /path/to/luajit/bin/luajit -bg /path/to/input_file.lua /path/to/output_file.luac
+    /path/to/luajit/bin/luajit -bg /path/to/input_file.lua /path/to/output_file.ljbc
 </geshi>
 
 Please refer to the official LuaJIT documentation on the <code>-b</code> option for more details:
@@ -537,12 +537,12 @@ It is therefore *highly* recommended to always declare such within an appropriat
 <geshi lang="lua">
     -- Avoid
     foo = 123
-    -- Recomended
+    -- Recommended
     local foo = 123
 
     -- Avoid
     function foo() return 123 end
-    -- Recomended
+    -- Recommended
     local function foo() return 123 end
 </geshi>
 
@@ -745,7 +745,7 @@ servers in Lua. For example,
 * add <code>ignore_resp_headers</code>, <code>ignore_resp_body</code>, and <code>ignore_resp</code> options to [[#ngx.location.capture|ngx.location.capture]] and [[#ngx.location.capture_multi|ngx.location.capture_multi]] methods, to allow micro performance tuning on the user side.
 * add automatic Lua code time slicing support by yielding and resuming the Lua VM actively via Lua's debug hooks.
 * add <code>stat</code> mode similar to [https://httpd.apache.org/docs/trunk/mod/mod_lua.html mod_lua].
-* cosocket: add client SSL certificiate support.
+* cosocket: add client SSL certificate support.
 
 = Changes =
 
@@ -812,7 +812,7 @@ There are also various testing modes based on mockeagain, valgrind, and etc. Ref
 
 This module is licensed under the BSD license.
 
-Copyright (C) 2009-2016, by Xiaozhe Wang (chaoslawful) <chaoslawful@gmail.com>.
+Copyright (C) 2009-2017, by Xiaozhe Wang (chaoslawful) <chaoslawful@gmail.com>.
 
 Copyright (C) 2009-2017, by Yichun "agentzh" Zhang (章亦春) <agentzh@gmail.com>, OpenResty Inc.
 
@@ -1057,15 +1057,18 @@ Runs the Lua code specified by the argument <code><lua-script-str></code> on the
 
 When Nginx receives the <code>HUP</code> signal and starts reloading the config file, the Lua VM will also be re-created and <code>init_by_lua</code> will run again on the new Lua VM. In case that the [[#lua_code_cache|lua_code_cache]] directive is turned off (default on), the <code>init_by_lua</code> handler will run upon every request because in this special mode a standalone Lua VM is always created for each request.
 
-Usually you can register (true) Lua global variables or pre-load Lua modules at server start-up by means of this hook. Here is an example for pre-loading Lua modules:
+Usually you can pre-load Lua modules at server start-up by means of this hook and take advantage of modern operating systems' copy-on-write (COW) optimization. Here is an example for pre-loading Lua modules:
 
 <geshi lang="nginx">
-    init_by_lua 'cjson = require "cjson"';
+    # this runs before forking out nginx worker processes:
+    init_by_lua_block { require "cjson" }
 
     server {
         location = /api {
             content_by_lua_block {
-                ngx.say(cjson.encode({dog = 5, cat = 6}))
+                -- the following require() will just  return
+                -- the alrady loaded module from package.loaded:
+                ngx.say(require "cjson".encode{dog = 5, cat = 6})
             }
         }
     }
@@ -1076,10 +1079,10 @@ You can also initialize the [[#lua_shared_dict|lua_shared_dict]] shm storage at 
 <geshi lang="nginx">
     lua_shared_dict dogs 1m;
 
-    init_by_lua '
+    init_by_lua_block {
         local dogs = ngx.shared.dogs;
         dogs:set("Tom", 56)
-    ';
+    }
 
     server {
         location = /api {
@@ -2276,7 +2279,7 @@ Note that: this directive is only allowed to used in '''http context''' from the
 
 '''context:''' ''http''
 
-'''phase:''' ''right-before-SSL-handshake''
+'''phase:''' ''right-after-SSL-handshake''
 
 Equivalent to [[#ssl_session_store_by_lua_block|ssl_session_store_by_lua_block]], except that the file specified by <code><path-to-lua-script-file></code> contains the Lua code, or rather, the [[#Lua/LuaJIT bytecode support|Lua/LuaJIT bytecode]] to be executed.
 
@@ -4932,7 +4935,7 @@ The optional fourth argument, <code>ctx</code>, can be a Lua table holding an op
 <geshi lang="lua">
     local ctx = { pos = 2 }
     local m, err = ngx.re.match("1234, hello", "[0-9]+", "", ctx)
-         -- m[0] = "34"
+         -- m[0] = "234"
          -- ctx.pos == 5
 </geshi>
 
@@ -5193,6 +5196,8 @@ The resulting object <code>dict</code> has the following methods:
 * [[#ngx.shared.DICT.lpop|lpop]]
 * [[#ngx.shared.DICT.rpop|rpop]]
 * [[#ngx.shared.DICT.llen|llen]]
+* [[#ngx.shared.DICT.ttl|ttl]]
+* [[#ngx.shared.DICT.expire|expire]]
 * [[#ngx.shared.DICT.flush_all|flush_all]]
 * [[#ngx.shared.DICT.flush_expired|flush_expired]]
 * [[#ngx.shared.DICT.get_keys|get_keys]]
@@ -5485,6 +5490,74 @@ Returns the number of elements in the list named <code>key</code> in the shm-bas
 If key does not exist, it is interpreted as an empty list and 0 is returned. When the <code>key</code> already takes a value that is not a list, it will return <code>nil</code> and <code>"value not a list"</code>.
 
 This feature was first introduced in the <code>v0.10.6</code> release.
+
+See also [[#ngx.shared.DICT|ngx.shared.DICT]].
+
+== ngx.shared.DICT.ttl ==
+'''syntax:''' ''ttl, err = ngx.shared.DICT:ttl(key)''
+
+'''context:''' ''init_by_lua*, set_by_lua*, rewrite_by_lua*, access_by_lua*, content_by_lua*, header_filter_by_lua*, body_filter_by_lua*, log_by_lua*, ngx.timer.*, balancer_by_lua*, ssl_certificate_by_lua*, ssl_session_fetch_by_lua*, ssl_session_store_by_lua*''
+
+'''requires:''' <code>resty.core.shdict</code> or <code>resty.core</code>
+
+Retrieves the remaining TTL (time-to-live in seconds) of a key-value pair in the shm-based dictionary [[#ngx.shared.DICT|ngx.shared.DICT]]. Returns the TTL as a number if the operation is successfully completed or <code>nil</code> and an error message otherwise.
+
+If the key does not exist (or has already expired), this method will return <code>nil</code> and the error string <code>"not found"</code>.
+
+The TTL is originally determined by the <code>exptime</code> argument of the [[#ngx.shared.DICT.set|set]], [[#ngx.shared.DICT.add|add]], [[#ngx.shared.DICT.replace|replace]] (and the likes) methods. It has a time resolution of <code>0.001</code> seconds. A value of <code>0</code> means that the item will never expire.
+
+Example:
+
+<geshi lang="lua">
+    require "resty.core"
+
+    local cats = ngx.shared.cats
+    local succ, err = cats:set("Marry", "a nice cat", 0.5)
+
+    ngx.sleep(0.2)
+
+    local ttl, err = cats:ttl("Marry")
+    ngx.say(ttl) -- 0.3
+</geshi>
+
+This feature was first introduced in the <code>v0.10.11</code> release.
+
+'''Note:''' This method requires the <code>resty.core.shdict</code> or <code>resty.core</code> modules from the [https://github.com/openresty/lua-resty-core lua-resty-core] library.
+
+See also [[#ngx.shared.DICT|ngx.shared.DICT]].
+
+== ngx.shared.DICT.expire ==
+'''syntax:''' ''success, err = ngx.shared.DICT:expire(key, exptime)''
+
+'''context:''' ''init_by_lua*, set_by_lua*, rewrite_by_lua*, access_by_lua*, content_by_lua*, header_filter_by_lua*, body_filter_by_lua*, log_by_lua*, ngx.timer.*, balancer_by_lua*, ssl_certificate_by_lua*, ssl_session_fetch_by_lua*, ssl_session_store_by_lua*''
+
+'''requires:''' <code>resty.core.shdict</code> or <code>resty.core</code>
+
+Updates the <code>exptime</code> (in second) of a key-value pair in the shm-based dictionary [[#ngx.shared.DICT|ngx.shared.DICT]]. Returns a boolean indicating success if the operation completes or <code>nil</code> and an error message otherwise.
+
+If the key does not exist, this method will return <code>nil</code> and the error string <code>"not found"</code>.
+
+The <code>exptime</code> argument has a resolution of <code>0.001</code> seconds. If <code>exptime</code> is <code>0</code>, then the item will never expire.
+
+Example:
+
+<geshi lang="lua">
+    require "resty.core"
+
+    local cats = ngx.shared.cats
+    local succ, err = cats:set("Marry", "a nice cat", 0.1)
+
+    succ, err = cats:expire("Marry", 0.5)
+
+    ngx.sleep(0.2)
+
+    local val, err = cats:get("Marry")
+    ngx.say(val) -- "a nice cat"
+</geshi>
+
+This feature was first introduced in the <code>v0.10.11</code> release.
+
+'''Note:''' This method requires the <code>resty.core.shdict</code> or <code>resty.core</code> modules from the [https://github.com/openresty/lua-resty-core lua-resty-core] library.
 
 See also [[#ngx.shared.DICT|ngx.shared.DICT]].
 
